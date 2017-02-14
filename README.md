@@ -11,6 +11,11 @@ The interface on my T102 is an RS-232 serial port.  So the shifter is needed to 
 Much of the code is based on a [DeskLink port to Linux](http://www.bitchin100.com/).
 The protocol is (reverse engineered) documented [here](http://bitchin100.com/wiki/index.php?title=TPDD_Base_Protocol)
 
+Pins used:
+* 10,11 - Software serial (tx,rx)
+* Analog 5V and ground for the power for the shifter.
+* SPI header for SD shield
+
 Current status:
 * Serial communications works.
 * SD card works
