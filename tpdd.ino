@@ -4,17 +4,17 @@
 #include <SD.h>
 #include <SoftwareSerial.h>
 
-//SoftwareSerial mySerial(6, 7); // RX, TX
+SoftwareSerial mySerial(10, 11); // RX, TX
 
-//#define DEBUG_PRINT(x) Serial.print(x)
-//#define DEBUG_PRINT1(x,y) Serial.print(x,y)
-//#define DEBUG_PRINTLN(x) Serial.println(x)
-//#define DEBUG_PRINTLN1(x,y) Serial.println(x,y)
+#define DEBUG_PRINT(x) Serial.print(x)
+#define DEBUG_PRINT1(x,y) Serial.print(x,y)
+#define DEBUG_PRINTLN(x) Serial.println(x)
+#define DEBUG_PRINTLN1(x,y) Serial.println(x,y)
 
-#define DEBUG_PRINT(x) 
-#define DEBUG_PRINT1(x,y)
-#define DEBUG_PRINTLN(x) 
-#define DEBUG_PRINTLN1(x,y) 
+//#define DEBUG_PRINT(x) 
+//#define DEBUG_PRINT1(x,y)
+//#define DEBUG_PRINTLN(x) 
+//#define DEBUG_PRINTLN1(x,y) 
 
 char preamble[2];
 char data[255];
@@ -39,7 +39,7 @@ void setup() {
   }
   
   Serial.print("Initializing SD card...");
-  pinMode(10, OUTPUT);
+  pinMode(53, OUTPUT);
   if (!SD.begin(8)) 
   {
     Serial.println("Card failed, or not present");
@@ -52,31 +52,30 @@ void setup() {
 
   
   // set the data rate for the SoftwareSerial port
- // mySerial.begin(19200);
- // bufpos = 0;
+  mySerial.begin(19200);
+  bufpos = 0;
 
   // Clear the trash out  
- // while(mySerial.available()) {
- //     mySerial.read();
- // }
+  while(mySerial.available()) {
+      mySerial.read();
+  }
   
   state = initial_state;
 }
 
 void loop() {
   // If there's data available
-  //if (mySerial.available()) {
-    if (false) {
-    
+  if (mySerial.available()) {
+  
     switch(state) {
       case initial_state:
-        //preamble[0] = mySerial.read();
+        preamble[0] = mySerial.read();
         DEBUG_PRINTLN("start preamble");
         state = start_preamble;
         break;
         
       case start_preamble:
-        //preamble[1] = mySerial.read();
+        preamble[1] = mySerial.read();
         DEBUG_PRINT("got preamble:");
         DEBUG_PRINT(preamble[0]);
         DEBUG_PRINTLN(preamble[1]);
@@ -91,7 +90,7 @@ void loop() {
           DEBUG_PRINTLN(preamble[1]);
         }
         else {
-          //command_type = mySerial.read();
+          command_type = mySerial.read();
           state=got_command_type;
           DEBUG_PRINT("got command type:");
           DEBUG_PRINTLN1(command_type,HEX);
@@ -99,22 +98,22 @@ void loop() {
         break;
         
       case got_command_type:
-        //length = mySerial.read();
+        length = mySerial.read();
         state = getting_data;
         DEBUG_PRINT("got length:");
-        DEBUG_PRINTLN1(command_type,HEX);
+        DEBUG_PRINTLN1(length,HEX);
         bufpos=0;
         break;
       
       case getting_data:
         if (bufpos >= length) {
-          //checksum = mySerial.read();
+          checksum = mySerial.read();
           state = processing_command;
           DEBUG_PRINT("got data - Checksum:");
           DEBUG_PRINTLN1(checksum,HEX);
         }
         else {
-          //data[bufpos++] = mySerial.read();
+          data[bufpos++] = mySerial.read();
           DEBUG_PRINT("Got byte ");
           DEBUG_PRINT(bufpos);
           DEBUG_PRINT(" of ");
@@ -143,53 +142,53 @@ void loop() {
           state=initial_state;
         }
         
-//        switch(command_type) {
-//          case 0x00:  /* Directory ref */
-//            process_directory_command();
-//            break;
-//          case 0x01:  /* Open file */
-//            open_file(data[0]);
-//            break;
-//          case 0x02:  /* Close file */
-//            close_file();
-//            break;
-//          case 0x03:  /* Read */
-//            read_file();
-//            break;
-//          case 0x04:  /* Write */
-//            write_file();
-//            break;
-//          case 0x05:  /* Delete */
-//            Serial.println("Processing delete file");
-//            //unlink ((char *) filename);
-//            normal_return(0x00);
-//            break;
-//          case 0x06:  /* Format disk */
-//            Serial.println("Ignoring format disk command");
-//            normal_return(0x00);
-//            break;
-//          case 0x07:  /* Drive Status */
-//            Serial.println("Ignoring drive status command");
-//            normal_return(0x00);
-//            break;
-//          case 0x08:  /* Drive condition */
-//            respond_place_path();
-//            break;
-//          case 0x0D:  /* Rename File */
-//            rename_file();
-//            break;
-//          case 0x23:  /* TS-DOS mystery command 2 */
-//            respond_mystery2();
-//            break;
-//          case 0x31:  /* TS-DOS mystery command 1 */
-//            //respond_mystery();
-//            DEBUG_PRINTLN("Processing mystery command 1");
-//            break;
-//        default:
-//            DEBUG_PRINT("Unknown command type:");
-//            DEBUG_PRINTLN1(command_type,HEX);
-//            break;
-//    } // Command type switch
+        switch(command_type) {
+          case 0x00:  /* Directory ref */
+            process_directory_command();
+            break;
+          case 0x01:  /* Open file */
+            open_file(data[0]);
+            break;
+          case 0x02:  /* Close file */
+            close_file();
+            break;
+          case 0x03:  /* Read */
+            read_file();
+            break;
+          case 0x04:  /* Write */
+            write_file();
+            break;
+          case 0x05:  /* Delete */
+            Serial.println("Processing delete file");
+            //unlink ((char *) filename);
+            normal_return(0x00);
+            break;
+          case 0x06:  /* Format disk */
+            Serial.println("Ignoring format disk command");
+            normal_return(0x00);
+            break;
+          case 0x07:  /* Drive Status */
+            Serial.println("Ignoring drive status command");
+            normal_return(0x00);
+            break;
+          case 0x08:  /* Drive condition */
+            respond_place_path();
+            break;
+          case 0x0D:  /* Rename File */
+            rename_file();
+            break;
+          case 0x23:  /* TS-DOS mystery command 2 */
+            respond_mystery2();
+            break;
+          case 0x31:  /* TS-DOS mystery command 1 */
+            //respond_mystery();
+            DEBUG_PRINTLN("Processing mystery command 1");
+            break;
+        default:
+            DEBUG_PRINT("Unknown command type:");
+            DEBUG_PRINTLN1(command_type,HEX);
+            break;
+    } // Command type switch
     state=initial_state;
   }
 }
@@ -222,13 +221,13 @@ void process_directory_command() {
         Serial.println("Get next directory block");
         break;
 
-//    case 0x03:  /* "previous" directory block */
-//        Serial.println("Get previous directory block");
-//        break;
+    case 0x03:  /* "previous" directory block */
+        Serial.println("Get previous directory block");
+        break;
 
-//    case 0x04:  /* end directory reference */
-//        Serial.println("End directory reference");
-//        break;
+    case 0x04:  /* end directory reference */
+        Serial.println("End directory reference");
+        break;
         
     default:
         Serial.print("Unknown directory command:");
@@ -310,7 +309,7 @@ void respond_mystery2()
 
 void send_data(unsigned char data[], int length) {
   for(int i=0; i < length; i++) {
-    //mySerial.write(data[i]);
+    mySerial.write(data[i]);
   }
 }
 
@@ -360,10 +359,10 @@ void normal_return(unsigned char type)
   data[0] = type;
   checksum = calc_sum();
   
-  //mySerial.write(command_type);
-  //mySerial.write(length);
-  //mySerial.write(type);
-  //mySerial.write(checksum);
+  mySerial.write(command_type);
+  mySerial.write(length);
+  mySerial.write(type);
+  mySerial.write(checksum);
 
   DEBUG_PRINT("Response: ");
   DEBUG_PRINTLN1(type,HEX);
