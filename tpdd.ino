@@ -4,17 +4,21 @@
 #include <SD.h>
 #include <SoftwareSerial.h>
 
-SoftwareSerial mySerial(10, 11); // RX, TX
+// Hard drive activity light on pin 7
+#define HDD_IND 7
 
-#define DEBUG_PRINT(x) Serial.print(x)
-#define DEBUG_PRINT1(x,y) Serial.print(x,y)
-#define DEBUG_PRINTLN(x) Serial.println(x)
-#define DEBUG_PRINTLN1(x,y) Serial.println(x,y)
+// Set the serial port to be on 62,63 (A8,A9 pins)
+SoftwareSerial mySerial(62, 63); // RX, TX
 
-//#define DEBUG_PRINT(x) 
-//#define DEBUG_PRINT1(x,y)
-//#define DEBUG_PRINTLN(x) 
-//#define DEBUG_PRINTLN1(x,y) 
+//#define DEBUG_PRINT(x) Serial.print(x)
+//#define DEBUG_PRINT1(x,y) Serial.print(x,y)
+//#define DEBUG_PRINTLN(x) Serial.println(x)
+//#define DEBUG_PRINTLN1(x,y) Serial.println(x,y)
+
+#define DEBUG_PRINT(x) 
+#define DEBUG_PRINT1(x,y)
+#define DEBUG_PRINTLN(x) 
+#define DEBUG_PRINTLN1(x,y) 
 
 char preamble[2];
 char data[255];
@@ -32,24 +36,30 @@ int state;
 #define processing_command 5
 
 void setup() {
-  // Open serial communications and wait for port to open:
+  // Open serial communications for debugging
   Serial.begin(9600);
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB port only
   }
   
-  Serial.print("Initializing SD card...");
+  // Set the hard drive light pin
+  pinMode(HDD_IND,OUTPUT);
+
+  // Note that even if it's not used as the CS pin, the hardware SS pin 
+  // (10 on most Arduino boards, 53 on the Mega) must be left as an output 
+  // or the SD library functions will not work. 
   pinMode(53, OUTPUT);
-  if (!SD.begin(8)) 
+  
+  Serial.print("Initializing SD card...");
+  if (!SD.begin(8))
   {
     Serial.println("Card failed, or not present");
   } 
   else {
     Serial.println("card initialized.");
-    printDirectory();
+    //printDirectory();
     //listFile();
   }
-
   
   // set the data rate for the SoftwareSerial port
   mySerial.begin(19200);
@@ -72,6 +82,7 @@ void loop() {
         preamble[0] = mySerial.read();
         DEBUG_PRINTLN("start preamble");
         state = start_preamble;
+        digitalWrite(HDD_IND,HIGH);
         break;
         
       case start_preamble:
@@ -190,6 +201,8 @@ void loop() {
             break;
     } // Command type switch
     state=initial_state;
+    digitalWrite(HDD_IND,LOW);
+
   }
 }
 
