@@ -1,0 +1,42 @@
+BASIC program to send data to TPDD
+10 open "com:98n1e" for output as #1
+20 d$=  the test case
+30 print #1,d$;
+
+Type 00 - Directory Reference
+
+     2   1  1  24             1           1           1      bytes
+ +----+--+--+--------------+----------+------------+------+
+ |5a5a|00|1a| filename     |attribute |search form |chksum| 
+ +----+--+--+--------------+----------+------------+------+
+Preamble - always 'ZZ'
+request - type 00h*
+length - length of data 1ah (26 decimal)
+filename - padded with blanks
+attribute - specify 'F' (not used normally)
+
+
+search form 00h - reference file for open or delete
+ZZ 0x00 0x1a --24 chars-- F 0x00 ??
+"ZZ"+chr$(0)+chr$(26) + "POOL  .BA" + space$(15) + "F" + chr$(0) + chr$(148)
+0+26+80+79+79+76+32+32+46+66+65+15*32+70+0=1131%256=107 xor 255 = 10010100b = 148
+
+search form 01h - request first directory block
+ZZ 0x00 0x1a --24 chars-- F 0x01 ??
+"ZZ"+chr$(0)+chr$(26) + space$(24) + "F" + chr$(1) + chr$(158)
+0+26+24*32+70+1=865%256=97 xor 255 = 1001 1110b =158 
+
+search form 02h - request next directory block
+ZZ 0x00 0x1a --24 chars-- F 0x02 ??
+"ZZ"+chr$(0)+chr$(26) + space$(24) + "F" + chr$(2) + chr$(157)
+0+26+24*32+70+2=866%256=98 xor 255 = 1001 1101b = 157
+
+search form 03h - request previous directory block
+ZZ 0x00 0x1a --24 chars-- F 0x03 ??
+"ZZ"+chr$(0)+chr$(26) + space$(24) + "F" + chr$(3) + chr$(156)
+0+26+24*32+70+3=867%256=99 xor 255 = 1001 1100b = 156
+
+search form 04h - end directory reference
+ZZ 0x00 0x1a --24 chars-- F 0x04 ??
+"ZZ"+chr$(0)+chr$(26) + space$(24) + "F" + chr$(4) + chr$(155)
+0+26+24*32+70+4=868%256=100  xor 255 = 1001 1011b = 155 

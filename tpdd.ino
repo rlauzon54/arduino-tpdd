@@ -7,25 +7,31 @@
 // Hard drive activity light on pin 7
 #define HDD_IND 7
 
+#define NO_FILE 75535
+
 // Set the serial port to be on 62,63 (A8,A9 pins)
 SoftwareSerial mySerial(62, 63); // RX, TX
 
-//#define DEBUG_PRINT(x) Serial.print(x)
-//#define DEBUG_PRINT1(x,y) Serial.print(x,y)
-//#define DEBUG_PRINTLN(x) Serial.println(x)
-//#define DEBUG_PRINTLN1(x,y) Serial.println(x,y)
+#define DEBUG_PRINT(x) Serial.print(x)
+#define DEBUG_PRINT1(x,y) Serial.print(x,y)
+#define DEBUG_PRINTLN(x) Serial.println(x)
+#define DEBUG_PRINTLN1(x,y) Serial.println(x,y)
 
-#define DEBUG_PRINT(x) 
-#define DEBUG_PRINT1(x,y)
-#define DEBUG_PRINTLN(x) 
-#define DEBUG_PRINTLN1(x,y) 
+//#define DEBUG_PRINT(x) 
+//#define DEBUG_PRINT1(x,y)
+//#define DEBUG_PRINTLN(x) 
+//#define DEBUG_PRINTLN1(x,y) 
 
 char preamble[2];
-char data[255];
+unsigned char data[255];
 int bufpos;
 int command_type;
 int length;
 int checksum;
+char filename[25];
+File selected_file;
+int selected_file_open;
+unsigned long selected_file_size;
 
 int state;
 #define initial_state 0
@@ -57,13 +63,13 @@ void setup() {
   } 
   else {
     Serial.println("card initialized.");
-    //printDirectory();
-    //listFile();
   }
   
   // set the data rate for the SoftwareSerial port
   mySerial.begin(19200);
   bufpos = 0;
+  
+  selected_file_open = 0;
 
   // Clear the trash out  
   while(mySerial.available()) {
@@ -200,18 +206,11 @@ void loop() {
             DEBUG_PRINTLN1(command_type,HEX);
             break;
     } // Command type switch
+    
     state=initial_state;
     digitalWrite(HDD_IND,LOW);
 
   }
-}
-
-void dump_data() {
-  for(int i = 0; i < bufpos; i++) {
-    DEBUG_PRINT1(data[i],HEX);
-    DEBUG_PRINT(",");
-  }
-  DEBUG_PRINTLN("");
 }
 
 void process_directory_command() {
@@ -223,23 +222,23 @@ void process_directory_command() {
   switch (search_form)
   {
     case 0x00:  /* Pick file for open/delete */
-      Serial.println("Pick file for open/delete");
+      pick_file();
       break;
 
     case 0x01:  /* "first" directory block */
-        Serial.println("Get first directory block");
+        get_first_directory_entry();
         break;
 
     case 0x02:  /* "next" directory block */
-        Serial.println("Get next directory block");
+        get_next_directory_entry();
         break;
 
     case 0x03:  /* "previous" directory block */
-        Serial.println("Get previous directory block");
+        get_prev_directory_entry();
         break;
 
     case 0x04:  /* end directory reference */
-        Serial.println("End directory reference");
+        end_directory_ref();
         break;
         
     default:
@@ -247,6 +246,227 @@ void process_directory_command() {
         Serial.println(search_form,HEX);
         break;
     }
+}
+
+void pick_file() {
+  Serial.println("Pick file for open/delete");
+    
+  // Get the file from the input
+  memcpy(filename,data,24);
+  filename[24]=0;
+  
+  // Remove trailing spaces
+  for(int i=23; i > 0 && filename[i] == ' '; i--) {
+    filename[i] = 0;
+  }
+
+  char *dot;
+  char *p;
+  /* Remove spaces between base and dot */
+  dot = strchr((char *)filename,'.');
+  if(dot != NULL) {
+    for(p=dot-1;*p==' ';p--);
+      memmove(p+1,dot,strlen((char *)dot)+1);
+  }
+  
+  Serial.print("Picked file:");
+  Serial.println(filename);
+  
+  // Open file
+  selected_file = SD.open(filename);
+  
+  // If the file doesn't exist
+  if (! selected_file) {
+    selected_file_size = NO_FILE;  // Indicate that we didn't find the file
+    selected_file_open = 0;
+    directory_ref_return(NULL,0);
+  }
+  else { // the file exists
+    selected_file_size = selected_file.size();
+    selected_file_open = 1;
+    directory_ref_return(filename,selected_file_size);
+  }
+  
+}
+
+void get_first_directory_entry() {
+  Serial.println("Get first directory block");
+
+  // If the directory is still open, close it
+  if (selected_file_open) {
+    selected_file.close();
+    selected_file_open = 0;
+  }
+  
+  // Open the root directory of the card
+  selected_file = SD.open("/");
+  selected_file_open = 1;
+  
+  // Get the first file
+  File entry =  selected_file.openNextFile();
+  
+  // If there was no file, return a no file
+  if (! entry) {
+    // blank file name is "no files"
+    directory_ref_return (NULL, 0);
+    Serial.println("No first file");
+  }
+  else { // there was a file, return the information about the file
+    directory_ref_return (entry.name(), entry.size());
+    strcpy(filename,entry.name()); // Remember for get_previous call
+    entry.close();
+    Serial.print("First file:");
+    Serial.println(filename);
+  }
+
+}
+
+void get_next_directory_entry() {
+  Serial.println("Get next directory block");
+
+  // If we never did a get_first, we shouldn't be able to do a get next
+  if (! selected_file_open) {
+    directory_ref_return (NULL, 0); // return no file
+    Serial.println("Next dir: dir not open");
+    return;
+  }
+
+  // Get the next file in the directory
+  File entry =  selected_file.openNextFile();
+  
+  // If there wasn't one, return no files
+  if (! entry) {
+    // blank file name is "no files"
+    directory_ref_return (NULL, 0);
+    Serial.println("Next dir: no more files");
+  }
+  else { // there was a file, return the information about the file
+    directory_ref_return (entry.name(), entry.size());
+    strcpy(filename,entry.name()); // Remember for get_previous call
+    entry.close();
+    Serial.print("Next file:");
+    Serial.println(filename);
+  }
+
+}
+
+void get_prev_directory_entry() {
+  char prev_filename[24];
+  int prev_size;
+  
+  Serial.println("Get prev directory block");
+
+  // If we haven't done a get first, we can't do a get previous
+  if (! selected_file_open) {
+    directory_ref_return (NULL, 0); // return no files
+    Serial.println("Prev dir: dir not open");
+    return;
+  }
+  
+  // We can't really go backwards, so we rewind the directory list to the start
+  selected_file.rewindDirectory();
+  memset(prev_filename, ' ', 24);
+  prev_filename[24]=0;
+  prev_size=NO_FILE;
+  
+  // Get the first file in the directory
+  File entry =  selected_file.openNextFile();
+  
+  // While there are files
+  while(entry) {
+    // If we found the current file
+    if (strcmp(entry.name(),filename) == 0) {
+      // If we encountered no previous files
+      if (prev_size == NO_FILE) {
+        directory_ref_return (NULL, 0); // return no file
+        entry.close();
+        Serial.println("Prev dir: no prev file");
+        return;
+      }
+      else { // return the information about the previous file
+        directory_ref_return (prev_filename, prev_size);
+        strcpy(filename,prev_filename); // Remember for get_previous call
+        entry.close();
+        Serial.print("Prev dir:");
+        Serial.println(prev_filename);
+        return;
+      }
+    }
+    else { // not the file we are looking for
+      // We need to remember it's information
+      strcpy(prev_filename,entry.name());
+      prev_size = entry.size();
+    }
+    
+    entry =  selected_file.openNextFile();
+  }
+  
+  // If we got here, we didn't find the file
+  directory_ref_return (NULL, 0);
+  Serial.println("Prev dir: No more files");
+}
+
+void end_directory_ref() {
+  Serial.println("End directory reference");
+
+  // If the directory is still open, close it
+  if (selected_file_open) {
+    selected_file.close();
+    selected_file_open = 0;
+  }
+  
+  // yes, we don't send a responce for this command
+}
+
+void directory_ref_return(char *file_name, int file_size)
+{
+  unsigned short size;
+  unsigned char *dotp;
+  unsigned char *p;
+  unsigned i;
+
+  memset(data,0,31);
+  data[29]=0x28; // 40 sectors free
+  data[0]=0x11; // return code
+  data[1]=0x1C; // length of response
+
+  // If we have a file name to process
+  if (file_name)
+  {
+    // Attribute = 'F'
+    data[26] = 'F';
+
+    size = file_size;
+
+    // Put the file size in the buffer
+    memcpy (data + 27, &size, 2);
+	   
+    // Blank out the file name
+    memset (data + 2, ' ', 24);
+
+    // Copy the file name to the buffer, upper case it
+    for (i = 0; i < min (strlen ((char *)file_name), 24); i++)
+    {
+      data[2+i] = toupper (file_name[i]);
+    }
+
+    // Convert file name from 123.BA to 123   .BA
+    dotp = (unsigned char*) memchr (data + 2, '.', 24);
+    if (dotp != NULL)
+    {
+      memmove (data + 6 + 2, dotp, 3);
+      for (p = dotp; p < data + 6 + 2; p++)
+        *p = ' ';
+    }
+  }
+
+  // Calculate the checksum
+  command_type = 0x11;
+  length = 0x1C;
+  data[30] = calc_sum ();
+
+  // return the response
+  send_data(data,31);
 }
 
 void open_file(int omode)
@@ -323,7 +543,11 @@ void respond_mystery2()
 void send_data(unsigned char data[], int length) {
   for(int i=0; i < length; i++) {
     mySerial.write(data[i]);
+    Serial.print(data[i],HEX);
+    Serial.print(" ");
   }
+
+  Serial.println("");
 }
 
 void listFile() {
@@ -339,30 +563,6 @@ void listFile() {
   else {
     Serial.println("error opening file");
   }
-}
-
-void printDirectory() {
-  File root;
-  root = SD.open("/");
-  
-   while(true) {
-     
-     File entry =  root.openNextFile();
-     if (! entry) {
-       // no more files
-       Serial.println("**nomorefiles**");
-       break;
-     }
-     Serial.print(entry.name());
-     if (entry.isDirectory()) {
-       Serial.println("/");
-     } else {
-       // files have sizes, directories do not
-       Serial.print("\t\t");
-       Serial.println(entry.size(), DEC);
-     }
-     entry.close();
-   }
 }
 
 void normal_return(unsigned char type)
@@ -391,5 +591,13 @@ int calc_sum()
   for(i=0;i<length;i++)
       sum+=data[i];
   return((sum & 0xFF) ^ 255);
+}
+
+void dump_data() {
+  for(int i = 0; i < bufpos; i++) {
+    DEBUG_PRINT1(data[i],HEX);
+    DEBUG_PRINT(",");
+  }
+  DEBUG_PRINTLN("");
 }
 
