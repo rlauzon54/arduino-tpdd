@@ -349,7 +349,6 @@ void get_next_directory_entry() {
     Serial.print("Next file:");
     Serial.println(filename);
   }
-
 }
 
 void get_prev_directory_entry() {
@@ -374,9 +373,9 @@ void get_prev_directory_entry() {
   // Get the first file in the directory
   File entry =  selected_file.openNextFile();
   
-  // While there are files
+  // While there are files in the directory
   while(entry) {
-    // If we found the current file
+    // If we found the current file we looked at
     if (strcmp(entry.name(),filename) == 0) {
       // If we encountered no previous files
       if (prev_size == NO_FILE) {
@@ -400,6 +399,7 @@ void get_prev_directory_entry() {
       prev_size = entry.size();
     }
     
+    // next directory entry
     entry =  selected_file.openNextFile();
   }
   
@@ -417,7 +417,7 @@ void end_directory_ref() {
     selected_file_open = 0;
   }
   
-  // yes, we don't send a responce for this command
+  // yes, we don't send a response for this command
 }
 
 void directory_ref_return(char *file_name, int file_size)
@@ -428,47 +428,43 @@ void directory_ref_return(char *file_name, int file_size)
   unsigned i;
 
   memset(data,0,31);
-  data[29]=0x28; // 40 sectors free
-  data[0]=0x11; // return code
-  data[1]=0x1C; // length of response
+  data[27]=0x28; // 40 sectors free
 
   // If we have a file name to process
   if (file_name)
   {
     // Attribute = 'F'
-    data[26] = 'F';
+    data[24] = 'F';
 
     size = file_size;
 
     // Put the file size in the buffer
-    memcpy (data + 27, &size, 2);
+    memcpy (data + 25, &size, 2);
 	   
     // Blank out the file name
-    memset (data + 2, ' ', 24);
+    memset (data, ' ', 24);
 
     // Copy the file name to the buffer, upper case it
     for (i = 0; i < min (strlen ((char *)file_name), 24); i++)
     {
-      data[2+i] = toupper (file_name[i]);
+      data[i] = toupper (file_name[i]);
     }
 
     // Convert file name from 123.BA to 123   .BA
-    dotp = (unsigned char*) memchr (data + 2, '.', 24);
+    dotp = (unsigned char*) memchr (data, '.', 24);
     if (dotp != NULL)
     {
-      memmove (data + 6 + 2, dotp, 3);
-      for (p = dotp; p < data + 6 + 2; p++)
+      memmove (data + 6, dotp, 3);
+      for (p = dotp; p < data + 6; p++)
         *p = ' ';
     }
   }
 
-  // Calculate the checksum
   command_type = 0x11;
   length = 0x1C;
-  data[30] = calc_sum ();
 
   // return the response
-  send_data(data,31);
+  send_data(command_type,data,28,calc_sum ());
 }
 
 void open_file(int omode)
@@ -534,10 +530,55 @@ void close_file() {
 
 void read_file() {
   Serial.println("Processing read file");
+  
+  // return type 10
+  command_type=0x10;
+
+  // If the file is not open
+  if(! selected_file_open)
+  {
+    normal_return(0x30); // no file name error
+    return;
+  }
+
+  // If we didn't open the file for read
+  if(selected_file_mode!=3)
+  {
+    normal_return(0x37);  // open format mismatch
+    return;
+  }
+
+  // get the next 128 bytes from the file
+  length = selected_file.read(data, 128);
+
+  // Calculate the check sum of the message
+  send_data(command_type, data, length, calc_sum());
 }
 
 void write_file() {
   Serial.println("Processing write file");
+
+  // if the file is not open
+  if (!selected_file_open) {
+    normal_return(0x30); // no file name
+    return;
+  }
+			
+  // If the open mode is not write
+  if(selected_file_mode!=1 && selected_file_mode !=2) {
+    normal_return(0x37); // open format mismatch
+    return;
+  }
+			
+  // Write the data out to the file
+  if(selected_file.write(data,length)!=length) {
+    normal_return(0x4a); // sector number error
+  }
+  else
+  {
+    normal_return(0x00); // everything's OK
+  }
+			
 }
 
 void delete_file() {
@@ -548,45 +589,122 @@ void delete_file() {
 
 void rename_file() {
   Serial.println("Processing file rename command");
+  char newfile_name[24];
+  int in;
+  
+  // Get the file from the input
+  memcpy(newfile_name,data,24);
+  newfile_name[24]=0;
+  
+  // Remove trailing spaces
+  for(int i=23; i > 0 && newfile_name[i] == ' '; i--) {
+    newfile_name[i] = 0;
+  }
+
+  char *dot;
+  char *p;
+  /* Remove spaces between base and dot */
+  dot = strchr((char *)newfile_name,'.');
+  if(dot != NULL) {
+    for(p=dot-1;*p==' ';p--);
+      memmove(p+1,dot,strlen((char *)dot)+1);
+  }
+  
+  // You can't rename a file to something that's already there
+  if (SD.exists(newfile_name)) {
+    normal_return(0x4A); // sector number error
+    return;
+  }
+
+  // there's no SD method for renaming a file.
+  // So we open the new file, copy the data from the old file, then delete the old file
+  
+  File oldfile = SD.open(filename,FILE_READ);
+  File newfile = SD.open(newfile_name,FILE_WRITE);
+  
+  in = oldfile.read(data,200);
+  while (in == 200) {
+    newfile.write(data,200);
+    in = oldfile.read(data,200);
+  }
+  if (in > 0) {
+    newfile.write(data,200);
+  }
+
+  newfile.close();
+  oldfile.close();
+  
+  SD.remove(filename);
 }
 
 void respond_place_path()
 {
-  static unsigned char canned[] =
-    {0x12, 0x0b, 0x00, 0x52, 0x4f, 0x4f, 0x54, 0x20, 0x20, 0x2e, 0x3c, 0x3e, 0x20, 0x96};
-
   Serial.println("Processing drive condition command");
-
-  send_data(canned,sizeof(canned));
+  data[0] = 0x00;
+  data[1] = 0x52;
+  data[2] = 0x4f;
+  data[3] = 0x4f;
+  data[4] = 0x54;
+  data[5] = 0x20;
+  data[6] = 0x20;
+  data[7] = 0x2e;
+  data[8] = 0x3c;
+  data[9] = 0x3e;
+  data[10] = 0x20;
+  send_data(0x12,data,11, 0x96);
 }
 
 void respond_mystery()
 {
-  static unsigned char canned[] = {0x38, 0x01, 0x00, 0xC6};
-
-  send_data(canned,sizeof(canned));
+  Serial.println("Processing mystery command 1");
+  data[0] = 0x00;
+  send_data(0x38,data,1,0xC6);
 }
 
 void respond_mystery2()
 {
-  static unsigned char canned[] =
-      {0x14, 0x0F, 0x41, 0x10, 0x01,
-       0x00, 0x50, 0x05, 0x00, 0x02,
-       0x00, 0x28, 0x00, 0xE1, 0x00,
-       0x00, 0x00, 0x2A};
-
   Serial.println("Processing mystery command 2");
-
-  send_data(canned,sizeof(canned));
+  data[0] = 0x41;
+  data[1] = 0x10;
+  data[2] = 0x01;
+  data[3] = 0x00;
+  data[4] = 0x50;
+  data[5] = 0x05;
+  data[6] = 0x00;
+  data[7] = 0x02;
+  data[8] = 0x00;
+  data[9] = 0x28;
+  data[10] = 0x00;
+  data[11] = 0xE1;
+  data[12] = 0x00;
+  data[13] = 0x00;
+  data[14] = 0x00;
+  send_data(0x14, data, 15, 0x2A);
 }
 
-void send_data(unsigned char data[], int length) {
+void send_data(char return_type, unsigned char data[], int length, int checksum) {
+  mySerial.write(return_type);
+  Serial.print(return_type,HEX);
+  Serial.print(" ");
+
+  mySerial.write(length);
+  Serial.print(length,HEX);
+  Serial.print(" ");
+  
   for(int i=0; i < length; i++) {
     mySerial.write(data[i]);
-    Serial.print(data[i],HEX);
+    if (data[i] > 31 && data[i] < 127) {
+      Serial.print((char)data[i]);
+    }
+    else {
+      Serial.print("0x");
+      Serial.print(data[i],HEX);
+    }
     Serial.print(" ");
   }
 
+  mySerial.write(checksum);
+  Serial.print(checksum,HEX);
   Serial.println("");
 }
 
@@ -610,15 +728,8 @@ void normal_return(unsigned char type)
   command_type = 0x12;
   length = 0x01;
   data[0] = type;
-  checksum = calc_sum();
   
-  mySerial.write(command_type);
-  mySerial.write(length);
-  mySerial.write(type);
-  mySerial.write(checksum);
-
-  DEBUG_PRINT("Response: ");
-  DEBUG_PRINTLN1(type,HEX);
+  send_data(command_type, data, length, calc_sum());
 }
 
 int calc_sum()
