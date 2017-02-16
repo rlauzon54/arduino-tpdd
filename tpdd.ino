@@ -31,6 +31,7 @@ int checksum;
 char filename[25];
 File selected_file;
 int selected_file_open;
+int selected_file_mode;
 unsigned long selected_file_size;
 
 int state;
@@ -70,6 +71,7 @@ void setup() {
   bufpos = 0;
   
   selected_file_open = 0;
+  selected_file_mode = 0;
 
   // Clear the trash out  
   while(mySerial.available()) {
@@ -472,25 +474,61 @@ void directory_ref_return(char *file_name, int file_size)
 void open_file(int omode)
 {
   Serial.print("Processing open file:");
-  Serial.println(omode,HEX);
+  Serial.println(filename);
+  
+  if (selected_file_open) {
+    selected_file.close();
+    selected_file_open = 0;
+  }
   
   switch(omode) {
     case 0x01:  /* New file for my_write */
       Serial.println("New file for write");
-      break;
+      if (SD.exists(filename)) {
+        Serial.println("Removing old file");
+        SD.remove(filename);
+      }
+      // Fall through
       
     case 0x02:  /* existing file for append */
-      Serial.println("Existing for append");
+      Serial.println("Opening file for append");
+      selected_file = SD.open(filename,FILE_WRITE);
+      selected_file_open=1;
       break;
       
     case 0x03:  /* Existing file for read */
       Serial.println("Existing for read");
-        break;
+      selected_file = SD.open(filename,FILE_READ);
+      selected_file_open=1;
+      break;
+    }
+    
+    // If the file didn't open
+    if (!selected_file) {
+      selected_file_open =0;
+      normal_return (0x37); // Error opening file
+    }
+    else {
+      if (selected_file.size() > 65535) {
+        selected_file_open =0;
+        normal_return (0x6E);// file too long error
+      }
+      else {
+        selected_file_open =1;
+        normal_return (0x00);
+        selected_file_mode = omode;
+      }    
     }
 }
 
 void close_file() {
   Serial.println("Processing close file");
+
+  if (selected_file_open) {
+    selected_file.close();
+    selected_file_open = 0;
+  }
+  
   normal_return(0x00);
 }
 
@@ -504,6 +542,8 @@ void write_file() {
 
 void delete_file() {
   Serial.println("Processing delete file");
+  if (selected_file_open) selected_file.close();
+  SD.remove(filename);
 }
 
 void rename_file() {
