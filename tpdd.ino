@@ -9,6 +9,9 @@
 
 #define NO_FILE 75535
 
+//#define SEND_DELAY delay(100)
+#define SEND_DELAY
+
 // Set the serial port to be on 62,63 (A8,A9 pins)
 SoftwareSerial mySerial(62, 63); // RX, TX
 
@@ -700,30 +703,37 @@ void respond_mystery2()
   send_data(0x14, data, 15, 0x2A);
 }
 
-void send_data(char return_type, unsigned char data[], int length, int checksum) {
+void send_data(unsigned char return_type, unsigned char data[], int length, int checksum) {
+  DEBUG_PRINT("0x");
+  SEND_DELAY;
   mySerial.write(return_type);
   DEBUG_PRINT1(return_type,HEX);
-  DEBUG_PRINT(" ");
+  DEBUG_PRINT("() ");
 
+  DEBUG_PRINT("0x");
+  SEND_DELAY;
   mySerial.write(length);
   DEBUG_PRINT1(length,HEX);
-  DEBUG_PRINT(" ");
+  DEBUG_PRINT("() ");
   
   for(int i=0; i < length; i++) {
+    SEND_DELAY;
     mySerial.write(data[i]);
+    DEBUG_PRINT("0x");
+    DEBUG_PRINT1(data[i],HEX);
+    
+    DEBUG_PRINT("(");
     if (data[i] > 31 && data[i] < 127) {
       DEBUG_PRINT((char)data[i]);
     }
-    else {
-      DEBUG_PRINT("0x");
-      DEBUG_PRINT1(data[i],HEX);
-    }
-    DEBUG_PRINT(" ");
+    DEBUG_PRINT(") ");
   }
 
+  DEBUG_PRINT("0x");
+  SEND_DELAY;
   mySerial.write(checksum);
   DEBUG_PRINT1(checksum,HEX);
-  DEBUG_PRINTLN("");
+  DEBUG_PRINTLN("()");
 }
 
 void normal_return(unsigned char type)
