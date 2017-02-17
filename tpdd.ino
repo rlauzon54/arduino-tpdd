@@ -28,6 +28,7 @@ int bufpos;
 int command_type;
 int length;
 int checksum;
+
 char filename[25];
 File selected_file;
 int selected_file_open;
@@ -53,8 +54,10 @@ void setup() {
   pinMode(HDD_IND,OUTPUT);
 
   // Note that even if it's not used as the CS pin, the hardware SS pin 
-  // (10 on most Arduino boards, 53 on the Mega) must be left as an output 
-  // or the SD library functions will not work. 
+  // (53 on the Mega) must be left as an output or the SD library 
+  // functions will not work. 
+  // Note that we connect to this pin through the SPI header.  The SD
+  // shield doesn't stretch to pin 53 on the Mega.
   pinMode(53, OUTPUT);
   
   Serial.print("Initializing SD card...");
@@ -86,29 +89,31 @@ void loop() {
   if (mySerial.available()) {
   
     switch(state) {
-      case initial_state:
+      case initial_state: // We started getting data
         preamble[0] = mySerial.read();
         DEBUG_PRINTLN("start preamble");
         state = start_preamble;
-        digitalWrite(HDD_IND,HIGH);
+        digitalWrite(HDD_IND,HIGH);  // turn the drive indicator on
         break;
         
-      case start_preamble:
+      case start_preamble: // second char read
         preamble[1] = mySerial.read();
         DEBUG_PRINT("got preamble:");
         DEBUG_PRINT(preamble[0]);
         DEBUG_PRINTLN(preamble[1]);
-        state = got_preamble;
+        state = got_preamble; // we have the pre-amble
         break;
       
       case got_preamble:
+      // If the pre-amble is junk, reset communications
         if (preamble[0] != 'Z' or preamble[1] != 'Z') {
           state=initial_state;  // Ignore the input
+          digitalWrite(HDD_IND,LOW);  // turn the drive indicator off        
           DEBUG_PRINT("BAD preamble:");
           DEBUG_PRINT(preamble[0]);
           DEBUG_PRINTLN(preamble[1]);
         }
-        else {
+        else { // we got good stuff - read the command type
           command_type = mySerial.read();
           state=got_command_type;
           DEBUG_PRINT("got command type:");
@@ -116,22 +121,25 @@ void loop() {
         }
         break;
         
-      case got_command_type:
-        length = mySerial.read();
+      case got_command_type: // we got the command type
+        length = mySerial.read(); // read the data length
         state = getting_data;
         DEBUG_PRINT("got length:");
         DEBUG_PRINTLN1(length,HEX);
         bufpos=0;
         break;
       
-      case getting_data:
+      case getting_data: // we have a length
+        // Did we get all the data?
         if (bufpos >= length) {
+          // yes, now read the checksum
           checksum = mySerial.read();
-          state = processing_command;
+          state = processing_command; // indicate that we got all the information we need to process the command
           DEBUG_PRINT("got data - Checksum:");
           DEBUG_PRINTLN1(checksum,HEX);
         }
-        else {
+        else { // Still reading
+          // Get the next char and put it away
           data[bufpos++] = mySerial.read();
           DEBUG_PRINT("Got byte ");
           DEBUG_PRINT(bufpos);
@@ -145,6 +153,7 @@ void loop() {
     } // switch
   }
   
+  // We have all the data for processing the command
     if (state == processing_command) {
         DEBUG_PRINT("Processing command type = ");
         DEBUG_PRINT1(command_type,HEX);
@@ -153,12 +162,14 @@ void loop() {
         DEBUG_PRINT(" csum = ");
         DEBUG_PRINTLN1(checksum,HEX);
     
+        // validate checksum
         if (calc_sum() != checksum) {
           DEBUG_PRINT("Bad checksum: ");
           DEBUG_PRINTLN1(calc_sum(),HEX);
           dump_data();
           normal_return(0x36);
           state=initial_state;
+          digitalWrite(HDD_IND,LOW);  // turn the drive indicator off
         }
         
         switch(command_type) {
@@ -178,9 +189,7 @@ void loop() {
             write_file();
             break;
           case 0x05:  /* Delete */
-            Serial.println("Processing delete file");
-            //unlink ((char *) filename);
-            normal_return(0x00);
+            delete_file();
             break;
           case 0x06:  /* Format disk */
             Serial.println("Ignoring format disk command");
@@ -204,8 +213,8 @@ void loop() {
             DEBUG_PRINTLN("Processing mystery command 1");
             break;
         default:
-            DEBUG_PRINT("Unknown command type:");
-            DEBUG_PRINTLN1(command_type,HEX);
+            Serial.print("Unknown command type:");
+            Serial.println(command_type,HEX);
             break;
     } // Command type switch
     
@@ -216,10 +225,10 @@ void loop() {
 }
 
 void process_directory_command() {
-  Serial.print("Processing directory ref: ");
+  DEBUG_PRINT("Processing directory ref: ");
 
   int search_form = data[length-1];
-  Serial.println(search_form,HEX);
+  DEBUG_PRINTLN1(search_form,HEX);
   
   switch (search_form)
   {
@@ -271,8 +280,8 @@ void pick_file() {
       memmove(p+1,dot,strlen((char *)dot)+1);
   }
   
-  Serial.print("Picked file:");
-  Serial.println(filename);
+  DEBUG_PRINT("Picked file:");
+  DEBUG_PRINTLN(filename);
   
   // Open file
   selected_file = SD.open(filename);
@@ -288,7 +297,6 @@ void pick_file() {
     selected_file_open = 1;
     directory_ref_return(filename,selected_file_size);
   }
-  
 }
 
 void get_first_directory_entry() {
@@ -311,20 +319,20 @@ void get_first_directory_entry() {
   if (! entry) {
     // blank file name is "no files"
     directory_ref_return (NULL, 0);
-    Serial.println("No first file");
+    DEBUG_PRINTLN("No first file");
   }
   else { // there was a file, return the information about the file
     directory_ref_return (entry.name(), entry.size());
     strcpy(filename,entry.name()); // Remember for get_previous call
     entry.close();
-    Serial.print("First file:");
-    Serial.println(filename);
+    DEBUG_PRINT("First file:");
+    DEBUG_PRINTLN(filename);
   }
 
 }
 
 void get_next_directory_entry() {
-  Serial.println("Get next directory block");
+  DEBUG_PRINTLN("Get next directory block");
 
   // If we never did a get_first, we shouldn't be able to do a get next
   if (! selected_file_open) {
@@ -340,14 +348,14 @@ void get_next_directory_entry() {
   if (! entry) {
     // blank file name is "no files"
     directory_ref_return (NULL, 0);
-    Serial.println("Next dir: no more files");
+    DEBUG_PRINTLN("Next dir: no more files");
   }
   else { // there was a file, return the information about the file
     directory_ref_return (entry.name(), entry.size());
     strcpy(filename,entry.name()); // Remember for get_previous call
     entry.close();
-    Serial.print("Next file:");
-    Serial.println(filename);
+    DEBUG_PRINT("Next file:");
+    DEBUG_PRINTLN(filename);
   }
 }
 
@@ -355,7 +363,7 @@ void get_prev_directory_entry() {
   char prev_filename[24];
   int prev_size;
   
-  Serial.println("Get prev directory block");
+  DEBUG_PRINTLN("Get prev directory block");
 
   // If we haven't done a get first, we can't do a get previous
   if (! selected_file_open) {
@@ -381,15 +389,15 @@ void get_prev_directory_entry() {
       if (prev_size == NO_FILE) {
         directory_ref_return (NULL, 0); // return no file
         entry.close();
-        Serial.println("Prev dir: no prev file");
+        DEBUG_PRINTLN("Prev dir: no prev file");
         return;
       }
       else { // return the information about the previous file
         directory_ref_return (prev_filename, prev_size);
         strcpy(filename,prev_filename); // Remember for get_previous call
         entry.close();
-        Serial.print("Prev dir:");
-        Serial.println(prev_filename);
+        DEBUG_PRINT("Prev dir:");
+        DEBUG_PRINTLN(prev_filename);
         return;
       }
     }
@@ -405,11 +413,11 @@ void get_prev_directory_entry() {
   
   // If we got here, we didn't find the file
   directory_ref_return (NULL, 0);
-  Serial.println("Prev dir: No more files");
+  DEBUG_PRINTLN("Prev dir: No more files");
 }
 
 void end_directory_ref() {
-  Serial.println("End directory reference");
+  DEBUG_PRINTLN("End directory reference");
 
   // If the directory is still open, close it
   if (selected_file_open) {
@@ -428,19 +436,10 @@ void directory_ref_return(char *file_name, int file_size)
   unsigned i;
 
   memset(data,0,31);
-  data[27]=0x28; // 40 sectors free
 
   // If we have a file name to process
   if (file_name)
   {
-    // Attribute = 'F'
-    data[24] = 'F';
-
-    size = file_size;
-
-    // Put the file size in the buffer
-    memcpy (data + 25, &size, 2);
-	   
     // Blank out the file name
     memset (data, ' ', 24);
 
@@ -458,20 +457,30 @@ void directory_ref_return(char *file_name, int file_size)
       for (p = dotp; p < data + 6; p++)
         *p = ' ';
     }
+
+    // Attribute = 'F'
+    data[24] = 'F';
+
+    size = file_size;
+
+    // Put the file size in the buffer
+    memcpy (data + 25, &size, 2);	   
   }
 
+  data[27]=0x28; // 40 sectors free
+
+  // Send the data back
   command_type = 0x11;
   length = 0x1C;
-
-  // return the response
   send_data(command_type,data,28,calc_sum ());
 }
 
 void open_file(int omode)
 {
-  Serial.print("Processing open file:");
-  Serial.println(filename);
+  DEBUG_PRINT("Processing open file:");
+  DEBUG_PRINTLN(filename);
   
+  // If we have a file open, close it
   if (selected_file_open) {
     selected_file.close();
     selected_file_open = 0;
@@ -479,21 +488,23 @@ void open_file(int omode)
   
   switch(omode) {
     case 0x01:  /* New file for my_write */
-      Serial.println("New file for write");
+      DEBUG_PRINTLN("New file for write");
+      
+      // if the file exists, remove it
       if (SD.exists(filename)) {
-        Serial.println("Removing old file");
+        DEBUG_PRINTLN("Removing old file");
         SD.remove(filename);
       }
       // Fall through
       
     case 0x02:  /* existing file for append */
-      Serial.println("Opening file for append");
+      DEBUG_PRINTLN("Opening file for append");
       selected_file = SD.open(filename,FILE_WRITE);
       selected_file_open=1;
       break;
       
     case 0x03:  /* Existing file for read */
-      Serial.println("Existing for read");
+      DEBUG_PRINTLN("Existing for read");
       selected_file = SD.open(filename,FILE_READ);
       selected_file_open=1;
       break;
@@ -505,11 +516,12 @@ void open_file(int omode)
       normal_return (0x37); // Error opening file
     }
     else {
+      // If the file is too large
       if (selected_file.size() > 65535) {
         selected_file_open =0;
         normal_return (0x6E);// file too long error
       }
-      else {
+      else { // everything's good
         selected_file_open =1;
         normal_return (0x00);
         selected_file_mode = omode;
@@ -518,7 +530,7 @@ void open_file(int omode)
 }
 
 void close_file() {
-  Serial.println("Processing close file");
+  DEBUG_PRINTLN("Processing close file");
 
   if (selected_file_open) {
     selected_file.close();
@@ -529,7 +541,7 @@ void close_file() {
 }
 
 void read_file() {
-  Serial.println("Processing read file");
+  DEBUG_PRINTLN("Processing read file");
   
   // return type 10
   command_type=0x10;
@@ -556,7 +568,7 @@ void read_file() {
 }
 
 void write_file() {
-  Serial.println("Processing write file");
+  DEBUG_PRINTLN("Processing write file");
 
   // if the file is not open
   if (!selected_file_open) {
@@ -582,17 +594,23 @@ void write_file() {
 }
 
 void delete_file() {
-  Serial.println("Processing delete file");
+  DEBUG_PRINTLN("Processing delete file");
+  
+  // If the file is open, remove it
   if (selected_file_open) selected_file.close();
+  
+  // Remove the file
   SD.remove(filename);
+  
+  normal_return(0x00);
 }
 
 void rename_file() {
-  Serial.println("Processing file rename command");
+  DEBUG_PRINTLN("Processing file rename command");
   char newfile_name[24];
   int in;
   
-  // Get the file from the input
+  // Get the new file name from the input
   memcpy(newfile_name,data,24);
   newfile_name[24]=0;
   
@@ -616,7 +634,7 @@ void rename_file() {
     return;
   }
 
-  // there's no SD method for renaming a file.
+  // There's no SD method for renaming a file.
   // So we open the new file, copy the data from the old file, then delete the old file
   
   File oldfile = SD.open(filename,FILE_READ);
@@ -628,7 +646,7 @@ void rename_file() {
     in = oldfile.read(data,200);
   }
   if (in > 0) {
-    newfile.write(data,200);
+    newfile.write(data,in);
   }
 
   newfile.close();
@@ -639,7 +657,7 @@ void rename_file() {
 
 void respond_place_path()
 {
-  Serial.println("Processing drive condition command");
+  DEBUG_PRINTLN("Processing drive condition command");
   data[0] = 0x00;
   data[1] = 0x52;
   data[2] = 0x4f;
@@ -656,14 +674,14 @@ void respond_place_path()
 
 void respond_mystery()
 {
-  Serial.println("Processing mystery command 1");
+  DEBUG_PRINTLN("Processing mystery command 1");
   data[0] = 0x00;
   send_data(0x38,data,1,0xC6);
 }
 
 void respond_mystery2()
 {
-  Serial.println("Processing mystery command 2");
+  DEBUG_PRINTLN("Processing mystery command 2");
   data[0] = 0x41;
   data[1] = 0x10;
   data[2] = 0x01;
@@ -684,43 +702,28 @@ void respond_mystery2()
 
 void send_data(char return_type, unsigned char data[], int length, int checksum) {
   mySerial.write(return_type);
-  Serial.print(return_type,HEX);
-  Serial.print(" ");
+  DEBUG_PRINT1(return_type,HEX);
+  DEBUG_PRINT(" ");
 
   mySerial.write(length);
-  Serial.print(length,HEX);
-  Serial.print(" ");
+  DEBUG_PRINT1(length,HEX);
+  DEBUG_PRINT(" ");
   
   for(int i=0; i < length; i++) {
     mySerial.write(data[i]);
     if (data[i] > 31 && data[i] < 127) {
-      Serial.print((char)data[i]);
+      DEBUG_PRINT((char)data[i]);
     }
     else {
-      Serial.print("0x");
-      Serial.print(data[i],HEX);
+      DEBUG_PRINT("0x");
+      DEBUG_PRINT1(data[i],HEX);
     }
-    Serial.print(" ");
+    DEBUG_PRINT(" ");
   }
 
   mySerial.write(checksum);
-  Serial.print(checksum,HEX);
-  Serial.println("");
-}
-
-void listFile() {
-  File dataFile = SD.open("ADVEN1.DO");
-  
-  if (dataFile) {
-    while (dataFile.available()) {
-      Serial.write(dataFile.read());
-    }
-    dataFile.close();
-  }
-  // if the file isn't open, pop up an error:
-  else {
-    Serial.println("error opening file");
-  }
+  DEBUG_PRINT1(checksum,HEX);
+  DEBUG_PRINTLN("");
 }
 
 void normal_return(unsigned char type)
