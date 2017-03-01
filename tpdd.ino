@@ -9,9 +9,6 @@
 
 #define NO_FILE 75535
 
-//#define SEND_DELAY delay(100)
-#define SEND_DELAY
-
 // Set the serial port to be on 62,63 (A8,A9 pins)
 SoftwareSerial mySerial(62, 63); // RX, TX
 
@@ -37,6 +34,7 @@ File selected_file;
 int selected_file_open;
 int selected_file_mode;
 unsigned long selected_file_size;
+unsigned long timeout;
 
 int state;
 #define initial_state 0
@@ -75,6 +73,7 @@ void setup() {
   // set the data rate for the SoftwareSerial port
   mySerial.begin(19200);
   bufpos = 0;
+  timeout = 0;
   
   selected_file_open = 0;
   selected_file_mode = 0;
@@ -90,38 +89,49 @@ void setup() {
 void loop() {
   // If there's data available
   if (mySerial.available()) {
+    timeout = 0;
   
     switch(state) {
       case initial_state: // We started getting data
         preamble[0] = mySerial.read();
-        DEBUG_PRINTLN("start preamble");
-        state = start_preamble;
-        digitalWrite(HDD_IND,HIGH);  // turn the drive indicator on
+        if (preamble[0] == 'Z') {
+          DEBUG_PRINTLN("start preamble");
+          state = start_preamble;
+          digitalWrite(HDD_IND,HIGH);  // turn the drive indicator on
+        }
+        else {
+          state=initial_state;  // Ignore the input
+          digitalWrite(HDD_IND,LOW);  // turn the drive indicator off        
+          DEBUG_PRINT("BAD preamble 0:");
+          debugChar(preamble[0]);
+          DEBUG_PRINTLN("");
+          preamble[0]=0;
+        }
         break;
         
       case start_preamble: // second char read
         preamble[1] = mySerial.read();
-        DEBUG_PRINT("got preamble:");
-        DEBUG_PRINT(preamble[0]);
-        DEBUG_PRINTLN(preamble[1]);
-        state = got_preamble; // we have the pre-amble
+        if (preamble[1] == 'Z') {
+          DEBUG_PRINT("got preamble:");
+          DEBUG_PRINT(preamble[0]);
+          DEBUG_PRINTLN(preamble[1]);
+          state = got_preamble; // we have the pre-amble
+        }
+        else {
+          state=initial_state;  // Ignore the input
+          digitalWrite(HDD_IND,LOW);  // turn the drive indicator off        
+          DEBUG_PRINT("BAD preamble 1:");
+          debugChar(preamble[1]);
+          DEBUG_PRINTLN("");
+          preamble[1]=0;
+        }
         break;
       
       case got_preamble:
-      // If the pre-amble is junk, reset communications
-        if (preamble[0] != 'Z' or preamble[1] != 'Z') {
-          state=initial_state;  // Ignore the input
-          digitalWrite(HDD_IND,LOW);  // turn the drive indicator off        
-          DEBUG_PRINT("BAD preamble:");
-          DEBUG_PRINT(preamble[0]);
-          DEBUG_PRINTLN(preamble[1]);
-        }
-        else { // we got good stuff - read the command type
-          command_type = mySerial.read();
-          state=got_command_type;
-          DEBUG_PRINT("got command type:");
-          DEBUG_PRINTLN1(command_type,HEX);
-        }
+        command_type = mySerial.read();
+        state=got_command_type;
+        DEBUG_PRINT("got command type:");
+        DEBUG_PRINTLN1(command_type,HEX);
         break;
         
       case got_command_type: // we got the command type
@@ -149,78 +159,90 @@ void loop() {
           DEBUG_PRINT(" of ");
           DEBUG_PRINT(length);
           DEBUG_PRINT(":");
-          DEBUG_PRINTLN1(data[bufpos-1],HEX);
+          debugChar(data[bufpos-1]);
+          DEBUG_PRINTLN(" ");
         }
         break;
                 
     } // switch
+  } else {
+    // We haven't seen data in a long time, timeout.
+    if (state != initial_state) {
+      timeout++;
+      if (timeout > 1000) {
+        DEBUG_PRINTLN("Timeout!");
+        timeout =0;
+        state=initial_state;
+        digitalWrite(HDD_IND,LOW);  // turn the drive indicator off
+      }
+    }
   }
   
   // We have all the data for processing the command
-    if (state == processing_command) {
-        DEBUG_PRINT("Processing command type = ");
-        DEBUG_PRINT1(command_type,HEX);
-        DEBUG_PRINT(" length = ");
-        DEBUG_PRINT1(length,HEX);
-        DEBUG_PRINT(" csum = ");
-        DEBUG_PRINTLN1(checksum,HEX);
-    
-        // validate checksum
-        if (calc_sum() != checksum) {
-          DEBUG_PRINT("Bad checksum: ");
-          DEBUG_PRINTLN1(calc_sum(),HEX);
-          dump_data();
-          normal_return(0x36);
-          state=initial_state;
-          digitalWrite(HDD_IND,LOW);  // turn the drive indicator off
-        }
-        
-        switch(command_type) {
-          case 0x00:  /* Directory ref */
-            process_directory_command();
-            break;
-          case 0x01:  /* Open file */
-            open_file(data[0]);
-            break;
-          case 0x02:  /* Close file */
-            close_file();
-            break;
-          case 0x03:  /* Read */
-            read_file();
-            break;
-          case 0x04:  /* Write */
-            write_file();
-            break;
-          case 0x05:  /* Delete */
-            delete_file();
-            break;
-          case 0x06:  /* Format disk */
-            Serial.println("Ignoring format disk command");
-            normal_return(0x00);
-            break;
-          case 0x07:  /* Drive Status */
-            Serial.println("Ignoring drive status command");
-            normal_return(0x00);
-            break;
-          case 0x08:  /* Drive condition */
-            respond_place_path();
-            break;
-          case 0x0D:  /* Rename File */
-            rename_file();
-            break;
-          case 0x23:  /* TS-DOS mystery command 2 */
-            respond_mystery2();
-            break;
-          case 0x31:  /* TS-DOS mystery command 1 */
-            //respond_mystery();
-            DEBUG_PRINTLN("Processing mystery command 1");
-            break;
-        default:
-            Serial.print("Unknown command type:");
-            Serial.println(command_type,HEX);
-            break;
-    } // Command type switch
-    
+  if (state == processing_command) {
+    timeout = 0;
+
+    DEBUG_PRINT("Processing command type = ");
+    DEBUG_PRINT1(command_type,HEX);
+    DEBUG_PRINT(" length = ");
+    DEBUG_PRINT1(length,HEX);
+    DEBUG_PRINT(" csum = ");
+    DEBUG_PRINTLN1(checksum,HEX);
+
+    // validate checksum
+    if (calc_sum() != checksum) {
+      DEBUG_PRINT("Bad checksum: ");
+      DEBUG_PRINTLN1(calc_sum(),HEX);
+      dump_data();
+      normal_return(0x36);
+    }
+    else {
+      switch(command_type) {
+        case 0x00:  /* Directory ref */
+          process_directory_command();
+          break;
+        case 0x01:  /* Open file */
+          open_file(data[0]);
+          break;
+        case 0x02:  /* Close file */
+          close_file();
+          break;
+        case 0x03:  /* Read */
+          read_file();
+          break;
+        case 0x04:  /* Write */
+          write_file();
+          break;
+        case 0x05:  /* Delete */
+          delete_file();
+          break;
+        case 0x06:  /* Format disk */
+          Serial.println("Ignoring format disk command");
+          normal_return(0x00);
+          break;
+        case 0x07:  /* Drive Status */
+          Serial.println("Ignoring drive status command");
+          normal_return(0x00);
+          break;
+        case 0x08:  /* Drive condition */
+          respond_place_path();
+          break;
+        case 0x0D:  /* Rename File */
+          rename_file();
+          break;
+        case 0x23:  /* TS-DOS mystery command 2 */
+          respond_mystery2();
+          break;
+        case 0x31:  /* TS-DOS mystery command 1 */
+          //respond_mystery();
+          DEBUG_PRINTLN("Processing mystery command 1");
+          break;
+      default:
+          Serial.print("Unknown command type:");
+          Serial.println(command_type,HEX);
+          break;
+      } // Command type switch
+    }
     state=initial_state;
     digitalWrite(HDD_IND,LOW);
 
@@ -703,21 +725,29 @@ void respond_mystery2()
   send_data(0x14, data, 15, 0x2A);
 }
 
+void debugChar(unsigned char data_char) {
+  DEBUG_PRINT("0x");
+  DEBUG_PRINT1(data_char,HEX);
+  
+  DEBUG_PRINT("(");
+  if (data_char > 31 && data_char < 127) {
+    DEBUG_PRINT((char)data_char);
+  }
+  DEBUG_PRINT(") ");  
+}
+
 void send_data(unsigned char return_type, unsigned char data[], int length, int checksum) {
   DEBUG_PRINT("0x");
-  SEND_DELAY;
   mySerial.write(return_type);
   DEBUG_PRINT1(return_type,HEX);
   DEBUG_PRINT("() ");
 
   DEBUG_PRINT("0x");
-  SEND_DELAY;
   mySerial.write(length);
   DEBUG_PRINT1(length,HEX);
   DEBUG_PRINT("() ");
   
   for(int i=0; i < length; i++) {
-    SEND_DELAY;
     mySerial.write(data[i]);
     DEBUG_PRINT("0x");
     DEBUG_PRINT1(data[i],HEX);
@@ -730,7 +760,6 @@ void send_data(unsigned char return_type, unsigned char data[], int length, int 
   }
 
   DEBUG_PRINT("0x");
-  SEND_DELAY;
   mySerial.write(checksum);
   DEBUG_PRINT1(checksum,HEX);
   DEBUG_PRINTLN("()");
