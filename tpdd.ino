@@ -224,8 +224,8 @@ void loop() {
           Serial.println("Ignoring drive status command");
           normal_return(0x00);
           break;
-        case 0x08:  /* Drive condition */
-          respond_place_path();
+        case 0x08:  /* Directory Management Extensions Request */
+          process_dme_ext_request();
           break;
         case 0x0D:  /* Rename File */
           rename_file();
@@ -680,19 +680,19 @@ void rename_file() {
   SD.remove(filename);
 }
 
-void respond_place_path()
+void process_dme_ext_request()
 {
-  DEBUG_PRINTLN("Processing drive condition command");
-  data[0] = 0x00;
-  data[1] = 0x52;
-  data[2] = 0x4f;
-  data[3] = 0x4f;
-  data[4] = 0x54;
+  DEBUG_PRINTLN("Directory Management Extensions Request");
+  data[0] = 0x00; // reserved
+  data[1] = 0x52; // R
+  data[2] = 0x4f; // O
+  data[3] = 0x4f; // O
+  data[4] = 0x54; // T
   data[5] = 0x20;
   data[6] = 0x20;
-  data[7] = 0x2e;
-  data[8] = 0x3c;
-  data[9] = 0x3e;
+  data[7] = 0x2e; // .
+  data[8] = 0x3c; // <
+  data[9] = 0x3e; // >
   data[10] = 0x20;
   send_data(0x12,data,11, 0x96);
 }
