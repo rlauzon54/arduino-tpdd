@@ -71,7 +71,7 @@ void setup() {
   }
   
   // set the data rate for the SoftwareSerial port
-  mySerial.begin(19200);
+  mySerial.begin(9600); //19200);
   bufpos = 0;
   timeout = 0;
   
@@ -221,7 +221,7 @@ void loop() {
           normal_return(0x00);
           break;
         case 0x07:  /* Drive Status */
-          Serial.println("Ignoring drive status command");
+          Serial.println("Drive status command");
           normal_return(0x00);
           break;
         case 0x08:  /* Directory Management Extensions Request */
@@ -234,8 +234,7 @@ void loop() {
           respond_mystery2();
           break;
         case 0x31:  /* TS-DOS mystery command 1 */
-          //respond_mystery();
-          DEBUG_PRINTLN("Processing mystery command 1");
+          respond_mystery();
           break;
       default:
           Serial.print("Unknown command type:");
@@ -459,6 +458,7 @@ void directory_ref_return(char *file_name, int file_size)
   unsigned char *dotp;
   unsigned char *p;
   unsigned i;
+  unsigned char temp;
 
   memset(data,0,31);
 
@@ -489,7 +489,11 @@ void directory_ref_return(char *file_name, int file_size)
     size = file_size;
 
     // Put the file size in the buffer
-    memcpy (data + 25, &size, 2);	   
+    memcpy (data + 25, &size, 2);
+    // We need to swap the bytes in the size
+    temp=data[25];
+    data[25]=data[26];
+    data[26]=temp;
   }
 
   data[27]=0x28; // 40 sectors free
