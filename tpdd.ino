@@ -197,6 +197,10 @@ void loop() {
       normal_return(0x36);
     }
     else {
+      // Command type > 0x40 means that the client wants to access the second bank on the TPDD2.
+      // We don't have banks, so just strip it off.
+      if (command_type > 0x40) command_type = command_type & 0xBF;
+      
       switch(command_type) {
         case 0x00:  /* Directory ref */
           process_directory_command();
