@@ -1,10 +1,23 @@
 # arduino-tpdd
 An Arduino-based system that emulates a Tandy Portable Disk Drive for the TRS-80 Model 100 and 102
 
+So far, failure.  One more shifter on the way.  This one promises to be a two way shifter that handles the flow control for me.
+
+The problem that I could not overcome was the RS-232 communications.  The T102 requires hardware flow control.  I was able to overcome the DTR/DSR by looping those signals on the cable side.  However, looping the CTS/RTS resulted in buffer overruns on the T102 side, making it drop data, and failing.
+
+Getting a shifter that supported RTS/CTS did not work for reasons that I cannot understand.  I believe it's because the shifter is geared only toward being a device, so it cannot do 2 way communications.
+
+A shifter is needed because the Arduino is only a 3.3v device and RS-232 can be up to 12 volts.  The shifter basically acts like a buffer and shifts the voltage in and out.
+
+
 Hardware:
 * Arduino Mega
 * [RS-232 Shifter](https://www.sparkfun.com/products/449)
-* [MicroSD Shield](https://www.sparkfun.com/products/12761)
+* [RS232 to TTL converter board DTE with male DB9 3.3V to 5V] (https://www.amazon.com/gp/product/B0088SNIOQ/ref=oh_aui_detailpage_o03_s01?ie=UTF8&psc=1)
+
+I originally tried a [MicroSD Shield](https://www.sparkfun.com/products/12761)
+but the T102 requires hardware flow control.  So I picked up the 
+NKC Electronics shifter which has the RTS/CTS control lines.
 
 The interface on the T102 is an RS-232 serial port.  So the shifter is needed to translate RS-232 to TTL on the Arduino.
 
@@ -18,6 +31,8 @@ Arduino pins used:
 * 63 (A9) - Shifter RX
 * Analog 5V and ground for the power for the shifter.
 * SPI header for SD shield
+* 23 CTS
+* 25 RTS
 
 Unavailable pins:
 * 10-13
