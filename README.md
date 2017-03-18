@@ -1,25 +1,25 @@
 # arduino-tpdd
 An Arduino-based system that emulates a Tandy Portable Disk Drive for the TRS-80 Model 100 and 102
 
-So far, failure.  One more shifter on the way.  This one promises to be a two way shifter that handles the flow control for me.
+# Hardware explanation
 
-The problem that I could not overcome was the RS-232 communications.  The T102 requires hardware flow control.  I was able to overcome the DTR/DSR by looping those signals on the cable side.  However, looping the CTS/RTS resulted in buffer overruns on the T102 side, making it drop data, and failing.
+Our base is a microcontroller.  I needed more memory than the Arduino Uno, so I went with the Arduino Mega to get enough SRAM.  The SD shield plus SoftwareSerial libraries just wouldn't fit in the Uno's small memory.
 
-Getting a shifter that supported RTS/CTS did not work for reasons that I cannot understand.  I believe it's because the shifter is geared only toward being a device, so it cannot do 2 way communications.
+The microSD shield was a no-brainer.  The only thing with that is that I had to solder the SPI headers on since the microSD shield was made for the Uno and the usual pin outs were not compatible with the Mega.  The SPI header, though, lined up.
 
-A shifter is needed because the Arduino is only a 3.3v device and RS-232 can be up to 12 volts.  The shifter basically acts like a buffer and shifts the voltage in and out.
+The biggest pain was the RS-232 shifter.  RS-232 operates from 3.3V to 12V.  So we need something to 1. shift DOWN the voltage (because sending more than 5V down the Arduino's TTL lines would fry it) and 2. to shift UP the TTL voltage to something that my T102 would like to see.
 
+The problem is most shifters are not made to be full, bi-directional RS-232.
+
+* [RS-232 Shifter](https://www.sparkfun.com/products/449)
+The first one I tried only wired up the TX, RX and GND lines.  That failed because the T102 uses hardware flow control.  I tried modifying the cable to loop back the control lines, but that resulted in dropped characters on the T102 side.
+
+* [RS232 to TTL converter board DTE with male DB9 3.3V to 5V](https://www.amazon.com/gp/product/B0088SNIOQ/ref=oh_aui_detailpage_o03_s01?ie=UTF8&psc=1)
+The second one I tried had the RTS/CTS control lines, but they were uni-directional (the Arduino side could not assert RTS, for example, only read it).
 
 Hardware:
 * Arduino Mega
-* [RS-232 Shifter](https://www.sparkfun.com/products/449)
-* [RS232 to TTL converter board DTE with male DB9 3.3V to 5V] (https://www.amazon.com/gp/product/B0088SNIOQ/ref=oh_aui_detailpage_o03_s01?ie=UTF8&psc=1)
-
-I originally tried a [MicroSD Shield](https://www.sparkfun.com/products/12761)
-but the T102 requires hardware flow control.  So I picked up the 
-NKC Electronics shifter which has the RTS/CTS control lines.
-
-The interface on the T102 is an RS-232 serial port.  So the shifter is needed to translate RS-232 to TTL on the Arduino.
+[MicroSD Shield](https://www.sparkfun.com/products/12761)
 
 Much of the code is based on a [DeskLink port to Linux](http://www.bitchin100.com/).
 The protocol is (reverse engineered) documented [here](http://bitchin100.com/wiki/index.php?title=TPDD_Base_Protocol)
@@ -31,8 +31,6 @@ Arduino pins used:
 * 63 (A9) - Shifter RX
 * Analog 5V and ground for the power for the shifter.
 * SPI header for SD shield
-* 23 CTS
-* 25 RTS
 
 Unavailable pins:
 * 10-13

@@ -9,9 +9,6 @@
 
 #define NO_FILE 75535
 
-#define RTS 25
-#define CTS 23
-
 // Set the serial port to be on 62,63 (A8,A9 pins)
 SoftwareSerial mySerial(62, 63); // RX, TX
 
@@ -57,10 +54,6 @@ void setup() {
   // Set the hard drive light pin
   pinMode(HDD_IND,OUTPUT);
   
-  // Set the RTS/CTS pins
-  pinMode(RTS,OUTPUT);
-  pinMode(CTS,INPUT);
-
   // Note that even if it's not used as the CS pin, the hardware SS pin 
   // (53 on the Mega) must be left as an output or the SD library 
   // functions will not work. 
@@ -94,12 +87,6 @@ void setup() {
 }
 
 void loop() {
-  // We are initialized, assert CTS
-  digitalWrite(CTS,HIGH);
-  DEBUG_PRINT("Asserting CTS HIGH");
-  DEBUG_PRINT("-RTS=");
-  DEBUG_PRINTLN(digitalRead(RTS));
-  
   // If there's data available
   if (mySerial.available()) {
     timeout = 0;
@@ -193,10 +180,6 @@ void loop() {
   
   // We have all the data for processing the command
   if (state == processing_command) {
-    // We are processing, turn CTS off
-    digitalWrite(CTS,LOW);
-    DEBUG_PRINTLN("CTS low");
-    
     timeout = 0;
 
     DEBUG_PRINT("Processing command type = ");
@@ -761,32 +744,19 @@ void debugChar(unsigned char data_char) {
   DEBUG_PRINT(") ");  
 }
 
-void wait_for_cts() {
-  while(digitalRead(CTS) != HIGH) {
-    DEBUG_PRINTLN("Waiting for CTS");
-  }
-}
-
 void send_data(unsigned char return_type, unsigned char data[], int length, int checksum) {
   // We are ready to send
-  // Assert RTS
-  digitalWrite(RTS,HIGH);
-  DEBUG_PRINTLN("RTS high");
-  
   DEBUG_PRINT("0x");
-  wait_for_cts();
   mySerial.write(return_type);
   DEBUG_PRINT1(return_type,HEX);
   DEBUG_PRINT("() ");
 
   DEBUG_PRINT("0x");
-  wait_for_cts();
   mySerial.write(length);
   DEBUG_PRINT1(length,HEX);
   DEBUG_PRINT("() ");
   
   for(int i=0; i < length; i++) {
-    wait_for_cts();
     mySerial.write(data[i]);
     DEBUG_PRINT("0x");
     DEBUG_PRINT1(data[i],HEX);
@@ -799,7 +769,6 @@ void send_data(unsigned char return_type, unsigned char data[], int length, int 
   }
 
   DEBUG_PRINT("0x");
-  wait_for_cts();
   mySerial.write(checksum);
   DEBUG_PRINT1(checksum,HEX);
   DEBUG_PRINTLN("()");
