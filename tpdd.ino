@@ -1,6 +1,7 @@
 /*
   Tandy Portable Disk Drive emulator
  */
+ 
 #include <SD.h>
 #include <SoftwareSerial.h>
 
@@ -71,7 +72,7 @@ void setup() {
   }
   
   // set the data rate for the SoftwareSerial port
-  mySerial.begin(9600); //19200);
+  mySerial.begin(19200);
   bufpos = 0;
   timeout = 0;
   
@@ -744,20 +745,32 @@ void debugChar(unsigned char data_char) {
   DEBUG_PRINT(") ");  
 }
 
+// Attempt at slowing down the response to see if that corrects the problem.
+#define SEND_DELAY 0
+#define SEND_DELAY1 0
+
 void send_data(unsigned char return_type, unsigned char data[], int length, int checksum) {
+  int written;
+  delay(SEND_DELAY1);
+  
   // We are ready to send
   DEBUG_PRINT("0x");
-  mySerial.write(return_type);
+  delay(SEND_DELAY);
+  written = mySerial.write(return_type);
   DEBUG_PRINT1(return_type,HEX);
   DEBUG_PRINT("() ");
+  if (written < 1) DEBUG_PRINT("Fail");
 
   DEBUG_PRINT("0x");
-  mySerial.write(length);
+  delay(SEND_DELAY);
+  written = mySerial.write(length);
   DEBUG_PRINT1(length,HEX);
   DEBUG_PRINT("() ");
+  if (written < 1) DEBUG_PRINT("Fail");
   
   for(int i=0; i < length; i++) {
-    mySerial.write(data[i]);
+    delay(SEND_DELAY);
+    written = mySerial.write(data[i]);
     DEBUG_PRINT("0x");
     DEBUG_PRINT1(data[i],HEX);
     
@@ -766,12 +779,15 @@ void send_data(unsigned char return_type, unsigned char data[], int length, int 
       DEBUG_PRINT((char)data[i]);
     }
     DEBUG_PRINT(") ");
+    if (written < 1) DEBUG_PRINT("Fail");
   }
 
   DEBUG_PRINT("0x");
-  mySerial.write(checksum);
+  delay(SEND_DELAY);
+  written = mySerial.write(checksum);
   DEBUG_PRINT1(checksum,HEX);
   DEBUG_PRINTLN("()");
+  if (written < 1) DEBUG_PRINT("Fail");
 }
 
 void normal_return(unsigned char type)

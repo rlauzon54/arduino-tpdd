@@ -1,57 +1,41 @@
 # arduino-tpdd
 An Arduino-based system that emulates a Tandy Portable Disk Drive for the TRS-80 Model 100 and 102
 
-# Project status: Failure (so far)
+# Project status: Failure
 
 The problem part is the RS-232 communications.
 
-The communications works with my test programs.  I am able to send the command and receive the correct response.  But when I try using the TS-DOS or TEENY program, the T102 doesn't respond correctly.
+The communications works with my test programs.  I am able to send the command and receive the correct response.  But when I try using the TS-DOS or TEENY, the T102 doesn't respond the same.
 
 I started out by assuming that the dlplus was "correct" and emulated what it sent for the responses.  I wrote programs that sent commands and checked the responses, comparing them to what dlplus would do.
 
 I got communications to work and I compared the input/output using the dlplus software with the input/output of my project.
-For each command input, I responded with the same data.  But the command/response is different.
 
-I hooked both dlplus and my project up.  The only thing that I did was get a directory list with 1 file in the directory.
-
-The first command is:
-4D 31 0D 5A 5A 08 00 F7
-Both dlplus and my project respond with
-12 0B 00 52 4F 4F 54 20    20 2E 3C 3E 20 96
-
-The second command is:
-4D 31 0D 5A 5A 07 00 F8
-Both respond with
-12 01 00 EC
-
-The third command is
-4D 31 0D 5A 5A 08 00 F7 - using dlplus
-But only
-5A 5A 08 00 F7 - using my project
-Both respond wtih
-12 0B 00 52 4F 4F 54 20    20 2E 3C 3E 20 96
-
-After that, it diverges.  My project gets
-Mystery command 2
-Mystery command 1
-Mystery command 1
-Mystery command 1
-
-dlplus gets:
-4D 31 0D 5A 5A 07 00 F8
-5A 5A 08 00 F7
-
-Finally, they both get:
-5A 5A 00 1A 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 46 01 9E
-And both respond with
-11 1C 41 44 56 45 4E 31    2E 42 41 20 20 20 20 20
-20 20 20 20 20 20 20 20    20 20 46 45 D3 28 1C
-
-But my project gets an error while dlplus shows the file in the directory.
+For each command input, I responded with the same data.  But after a short period, the commands go different for my Arduino.
 
 The TPDD and T102 need hardware flow control.  My belief is that since I am not doing real hardware flow control, the T102 side says "stop", but my project keeps sending - resulting in dropped characters on the T102 side.  Basically, a garbled response.
 
-I'm still trying.  My testing not using TS-DOS/TEENY seems to be working, though.  Still testing.
+I wrote a simple BASIC program that sends canned commands and validates against the known responses - based on what dlplus sends/receives (TEST1.DO).  That works.
+
+I did go down a path by reducing the speed of the connection to 9600.  That seemed to give me more, but it was a red herring.  I looked through the [TS-DOS dump](http://bitchin100.com/wiki/index.php?title=M100_TS-DOS_ROM_TPDD_Protocol) (nicely annotated - thank you!) and I tried to go through the code to see what I was doing wrong.
+
+I located the routine in TS-DOS that sends the first commands and checks to see if I'm using Desklink/NADSBox.  I see the M1 08 command.  It uses that to see if the drive responds at 19200 BPS.  If it doesn't, it assumes that it's NOT Desklink/NADSBox.  It then sends a M1 07 command.  I see the M1 07 come accross at 19200.  But when it checks it's receive buffer, there's no response, which makes it drop to 9600 BPS - and that's the end of comminucations.
+
+At this point, I don't know what the issue is.  I see the Arduino sending the correct data for the M1 07 command (it matches what dlplus sends).
+
+In TS-DOS 4A94H, it calls 49A2H which sends the M1 08, M1 07 commands.  It then checks the queue for pending characters.  If it finds none, it lowers the speed to 9600.
+
+For dlplus, 4A94H works, which returns to 4943H, which calls 49A2H again.  I see this in the output.  Then the 08 commands is sent.  Again, I see this for dlplus.
+
+But for the Arduino, only the first call to 49A2H happens, then the speed is set to 9600 and communications fails.
+
+Yet, when I write the BASIC program that sends the same commands, the Arduino responds with the right values - everything it send/received with no problem.  So I know that communication works.
+
+I tried delaying the response for each command.
+I tried a delay between each byte sent.
+Arduino SoftwareSerial does NOT buffer out bound data.
+
+At this point, I've run out of ideas.  I can't see why TS-DOS doesn't see the response for the 07 command.  My only theory goes back to the hardware flow control, which I can't seem to get anything for in Arduino-land.
 
 # Hardware explanation
 

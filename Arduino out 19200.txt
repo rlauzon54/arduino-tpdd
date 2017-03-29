@@ -1,0 +1,56 @@
+Initializing SD card...card initialized.
+BAD preamble 0:0x4D(M) 
+BAD preamble 0:0x31(1) 
+BAD preamble 0:0xD() 
+start preamble
+got preamble:ZZ
+got command type:8
+got length:0
+got data - Checksum:F7
+Processing command type = 8 length = 0 csum = F7
+Directory Management Extensions Request
+0x12() 0xB() 0x0() 0x52(R) 0x4F(O) 0x4F(O) 0x54(T) 0x20( ) 0x20( ) 0x2E(.) 0x3C(<) 0x3E(>) 0x20( ) 0x96()
+BAD preamble 0:0xD() 
+BAD preamble 0:0xD() 
+BAD preamble 0:0x4D(M) 
+BAD preamble 0:0x31(1) 
+BAD preamble 0:0xD() 
+start preamble
+got preamble:ZZ
+got command type:7
+got length:0
+got data - Checksum:F8
+Processing command type = 7 length = 0 csum = F8
+Drive status command
+0x12() 0x1() 0x0() 0xEC()
+BAD preamble 0:0xE6() 
+BAD preamble 0:0x98() 
+BAD preamble 0:0x6() 
+BAD preamble 0:0x98() 
+BAD preamble 0:0x1E() 
+BAD preamble 0:0xF8() 
+BAD preamble 0:0x98() 
+BAD preamble 0:0x66(f) 
+BAD preamble 0:0xE6() 
+BAD preamble 0:0x66(f) 
+BAD preamble 0:0x60(`) 
+BAD preamble 0:0x60(`) 
+BAD preamble 0:0x0() 
+BAD preamble 0:0x7E(~) 
+BAD preamble 0:0xE6() 
+BAD preamble 0:0x80() 
+BAD preamble 0:0x1E() 
+BAD preamble 0:0xF8() 
+BAD preamble 0:0xE6() 
+BAD preamble 0:0x98() 
+BAD preamble 0:0x6() 
+BAD preamble 0:0x98() 
+BAD preamble 0:0x1E() 
+BAD preamble 0:0xF8() 
+BAD preamble 0:0x98() 
+BAD preamble 0:0x66(f) 
+BAD preamble 0:0xE6() 
+BAD preamble 0:0x66(f) 
+BAD preamble 0:0x0() 
+BAD preamble 0:0x0() 
+BAD preamble 0:0x80() 
