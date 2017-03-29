@@ -1,0 +1,44 @@
+4D 31 0D 5A 5A 08 00 F7 
+Processing command type = 08 length = 00 csum = F7
+response: 12 0B 00 52 4F 4F 54 20    20 2E 3C 3E 20 96    
+
+
+0D 0D 4D 31 0D 5A 5A 07 00 F8 
+Processing command type = 07 length = 00 csum = F8
+response: 12 01 00 EC       
+
+
+Response: 00
+4D 31 0D 5A 5A 08 00 F7 
+Processing command type = 08 length = 00 csum = F7
+response: 12 0B 00 52 4F 4F 54 20    20 2E 3C 3E 20 96    
+
+
+0D 0D 4D 31 0D 5A 5A 07 00 F8 
+Processing command type = 07 length = 00 csum = F8
+response: 12 01 00 EC       
+
+
+Response: 00
+5A 5A 08 00 F7 
+Processing command type = 08 length = 00 csum = F7
+response: 12 0B 00 52 4F 4F 54 20    20 2E 3C 3E 20 96    
+
+
+5A 5A 00 1A 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 46 01 9E 
+Processing command type = 00 length = 1A csum = 9E
+get first directory entry command
+. (4151291072).. (4096)ADVEN1.BA (4096)added file ADVEN1.BA len 17875
+get_first_file -> ADVEN1.BA len = 17875
+out_dirent: ADVEN1.BA
+no fmt: ADVEN1.BA
+str: ADVEN1.BA               
+response: 11 1C 41 44 56 45 4E 31    2E 42 41 20 20 20 20 20    
+20 20 20 20 20 20 20 20    20 20 46 45 D3 28 1C    
+
+
+5A 5A 00 1A 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 F6 02 ED 
+Processing command type = 00 length = 1A csum = ED
+out_dirent: (null)
+response: 11 1C 00 00 00 00 00 00    00 00 00 00 00 00 00 00    
+00 00 00 00 00 00 00 00    00 00 00 00 00 28 AA   
